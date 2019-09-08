@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style> /* set the CSS */
+
+body { font: 12px Arial;}
+
+.axis path,
+.axis line {
+    fill: none;
+    stroke: grey;
+    stroke-width: 1;
+    shape-rendering: crispEdges;
+}
+
+.d3-tip {
+  line-height: 1;
+  font-weight: bold;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  border-radius: 2px;
+}
+
+/* Creates a small triangle extender for the tooltip */
+.d3-tip:after {
+  box-sizing: border-box;
+  display: inline;
+  font-size: 10px;
+  width: 100%;
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.8);
+  content: "\25BC";
+  position: absolute;
+  text-align: center;
+}
+
+/* Style northward tooltips differently */
+.d3-tip.n:after {
+  margin: -1px 0 0 0;
+  top: 100%;
+  left: 0;
+}
+
+</style>
+<body>
+
+<!-- load the d3.js library -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
+
+<script>
+// Set the dimensions of the canvas / graph
+var margin = {top: 30, right: 20, bottom: 30, left: 50},
+    width = 1024 - margin.left - margin.right,
+    height = 768 - margin.top - margin.bottom;
+
+// Set the ranges
+var x = d3.scale.linear().range([0, width]);
+var y = d3.scale.linear().range([height, 0]);
+
+// Define the axes
+var xAxis = d3.svg.axis().scale(x)
+    .orient("bottom").tickValues([-25, 25]);
+
+var yAxis = d3.svg.axis().scale(y)
+    .orient("left").tickValues([-25, 25]);
+
+var tip = d3.tip()
+  .attr('class', 'd3-tip')
+  .offset([-10, 0])
+  .html(function(d) {
+    return "<span style='color:white'>" + d.text + ", " + d.r + "% " + Math.atan2(d.x, d.y) + "</span>";
+  });
+
+// Adds the svg canvas
+var svg = d3.select("body")
+    .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+        .attr("transform",
+              "translate(" + margin.left + "," + margin.top + ")");
+
+svg.call(tip);
+
+// Get the data
+d3.csv("data.csv", function(error, data) {
+    data.forEach(function(d) {
+        d.x = +d.x;
+        d.y = +d.y;
+        d.r = +d.r;
+    });
+
+    // Scale the range of the data
+    x.domain([-25, 25]);
+    y.domain([-25, 25]);
+
+    var labelR = [],
+        labelX = [],
+        labelY = [];
+
+    // Add the scatterplot
+    var circles = svg.selectAll("circle")
+        .data(data)
+    .enter().append("circle")
+        .style("stroke", "black")
+        .style("fill", "lightblue")
+        .style("stroke-dasharray", ("10,3"))
+        .attr("r", function(d) { labelR.push(d.r); return d.r; })
+        .attr("cx", function(d) { labelX.push(d.x); return x(d.x); })
+        .attr("cy", function(d) { labelY.push(d.y); return y(d.y); })
+        .on('mouseover', tip.show)
+        .on('mouseout', tip.hide);
+
+    distance = function (l, d) { return {x: l * Math.cos(-Math.atan2(d.x, d.y) + 1.57),
+                                        y: l * Math.sin(-Math.atan2(d.x, d.y) + 1.57)} }
+
+    var g = svg.selectAll("g")
+        .data(data)
+    .enter().append("g")
+        .attr('text-anchor', 'middle')
+        .attr("id", function(d, i) { return "gid" + i; })
+        .attr("transform", function(d) { return "translate(" + x(distance(0, d).x) + ", " + y(distance(0, d).y) + ")"; });
+
+    ///////////////////////////////////////////////////////////////////////////
+    var textToRender = {
+      mainArray: [],
+      wordArray: [],
+      resoArray: [],
+      init: function(d, i, c) { // c - words per line
+        this.mainArray.push({
+            text: d.text,
+            r: d.r,
+            output: d.text + ", " + d.r + "%"
+          });
+
+        this.wordArray.push(this.mainArray[i].output.split(" "));
+
+        var lines = [];
+        var wordCounter = 0,
+            newLine = true,
+            line = "";
+        for (var wordInArray = 0; wordInArray < this.wordArray[i].length; wordInArray++) {
+          if(newLine === true) {
+            line = this.wordArray[i][wordInArray];
+            newLine = false;
+          } else {
+            line = line + " " + this.wordArray[i][wordInArray];
+          }
+          wordCounter++;
+          if(wordCounter >= c || wordInArray === this.wordArray[i].length - 1) {
+            lines.push(line);
+            wordCounter = 0;
+            newLine = true;
+            line = ""
+          }
+        }
+        this.resoArray.push(lines);
+        return 0;
+      },
+      elementOutput: function(i) {
+        return this.mainArray[i].output;
+      },
+      rowOutput: function(i, j) {
+        return this.resoArray[i][j];
+      }
+    }
+
+    // initialisation
+    var firstRow = g.append("text")
+        .text(function(d, i) { textToRender.init(d, i, 6); }) // 6 words per line
+        .attr("y",0);
+    firstRow.remove();
+
+    for(var j = 0; j < 10; j++) { // 10 is just a huge reserve
+      g.append("text")
+          .text(function(d, i) { return textToRender.rowOutput(i, j); })
+          .attr("y",j+"em");
+    }
+    ///////////////////////////////////////////////////////////////////////////
+
+    var values = [];
+    for (var i = 0 ; i < labelX.length ; i++) {
+      var d = {x: labelX[i], y: labelY[i]};
+      values.push(0);
+
+      do {
+        var col = false;
+        d3.select("#gid" + i).attr("transform", "translate(" + x(distance(values[i], d).x) + ", " + y(distance(values[i], d).y) + ")");
+        values[i] += 0.1;
+
+        for (var j = 0; j < labelX.length ; j++ ) {
+          if (i === j) continue;
+
+          var a = g[0][i].getBoundingClientRect();
+          var b = g[0][j].getBoundingClientRect();
+
+          var collision = !(a.right < b.left ||
+                            a.left > b.right ||
+                            a.bottom < b.top ||
+                            a.top > b.bottom);
+
+          if(collision === true) {
+            col = true;
+            break;
+          }
+        }
+
+        for (var j = 0; j < labelX.length ; j++ ) {
+          var a = g[0][i].getBoundingClientRect();
+          var b = circles[0][j].getBoundingClientRect();
+
+          var collision = !(a.right < b.left ||
+                        a.left > b.right ||
+                        a.bottom < b.top ||
+                        a.top > b.bottom);
+
+          if(collision === true) {
+            col = true;
+            break;
+          }
+        }
+
+        if(values[i]>20) {
+          col = false;
+        }
+
+      } while (col === true);
+    }
+
+    svg.selectAll("line")
+        .data(data)
+    .enter().append("line")
+            .attr("x1", function(d) { return x(d.x); })
+            .attr("y1", function(d) { return y(d.y); })
+            .attr("x2", function(d, i) { return x(distance(values[i], d).x); })
+            .attr("y2", function(d, i) { return y(distance(values[i], d).y); })
+            .style("stroke", "rgb(6,120,155)")
+            .style("stroke-width", 1);
+
+    // Add the X Axis
+    svg.append("g")
+        .attr("class", "x axis")
+        .attr("transform", "translate(0," + height/2 + ")")
+        .call(xAxis);
+
+    // Add the Y Axis
+    svg.append("g")
+        .attr("class", "y axis")
+        .attr("transform", "translate(" + width/2 + ",0)")
+        .call(yAxis);
+
+});
+
+</script>
+</body>
